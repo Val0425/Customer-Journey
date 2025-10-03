@@ -5,8 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Plantilla de Experiencia de Usuario Interactiva</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
+    <!-- Navigation and Controls -->
+    <nav class="table-controls">
+        <div class="controls-left">
+            <button id="newTableBtn" class="btn-primary">➕ Nueva Tabla</button>
+            <button id="saveTableBtn" class="btn-secondary">💾 Guardar</button>
+            <button id="viewTablesBtn" class="btn-secondary">📋 Ver Tablas</button>
+        </div>
+        <div class="controls-center">
+            <h2 id="currentTableName" class="editable-title" title="Haz clic para editar">Tabla Sin Nombre</h2>
+        </div>
+        <div class="controls-right">
+            <button id="exportPdfBtn" class="btn-export">📄 Exportar PDF</button>
+        </div>
+    </nav>
+
+    <!-- Table Name Modal -->
+    <div id="nameModal" class="modal">
+        <div class="modal-content">
+            <h3>Nombre de la Tabla</h3>
+            <input type="text" id="tableNameInput" placeholder="Ingrese el nombre de la tabla">
+            <div class="modal-buttons">
+                <button id="saveNameBtn" class="btn-primary">Guardar</button>
+                <button id="cancelNameBtn" class="btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tables List Modal -->
+    <div id="tablesModal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3>Tablas Guardadas</h3>
+                <button id="closeTablesModal" class="close-btn">✕</button>
+            </div>
+            <div id="tablesList" class="tables-list"></div>
+        </div>
+    </div>
+
     <div class="container">
         <div class="header-label"></div>
         <div class="header-title before">ANTES</div>
