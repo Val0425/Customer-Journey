@@ -6,9 +6,11 @@
     <title>Plantilla de Experiencia de Usuario Interactiva</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-</head>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    </head>
 <body>
-    <!-- Navigation and Controls -->
     <nav class="table-controls">
         <div class="controls-left">
             <button id="newTableBtn" class="btn-primary">➕ Nueva Tabla</button>
@@ -23,7 +25,6 @@
         </div>
     </nav>
 
-    <!-- Table Name Modal -->
     <div id="nameModal" class="modal">
         <div class="modal-content">
             <h3>Nombre de la Tabla</h3>
@@ -35,7 +36,6 @@
         </div>
     </div>
 
-    <!-- Tables List Modal -->
     <div id="tablesModal" class="modal">
         <div class="modal-content large">
             <div class="modal-header">

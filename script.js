@@ -1,22 +1,46 @@
 class TableManager {
     constructor() {
         this.currentTableId = null;
-        this.tables = this.loadTables();
+        this.tables = []; // Data se cargará asíncronamente desde Firebase
+        this.db = null;
+        
+        // =========================================================================
+        // 🔑 CONFIGURACIÓN DE FIREBASE INYECTADA
+        // =========================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBSPaon2DVP1OPZVRxC0ZIx7bydV8-ELXg",
+            authDomain: "proyecto-cx--cjm.firebaseapp.com",
+            projectId: "proyecto-cx--cjm",
+            storageBucket: "proyecto-cx--cjm.firebasestorage.app",
+            messagingSenderId: "153629939597",
+            appId: "1:153629939597:web:bf702e3fc4802fcd7d0fc4",
+            measurementId: "G-WX6HLYZX9G"
+        };
+
+        try {
+            // Inicializa la app de Firebase (usando compat v9)
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            // Obtén la instancia de Firestore
+            this.db = firebase.firestore();
+            console.log("Conexión a Firebase Firestore establecida.");
+        } catch (error) {
+            console.error("Error al inicializar Firebase:", error);
+            this.showNotification("Error: No se pudo conectar a Firebase. Revisa las credenciales.", 'error');
+        }
+        
         this.init();
     }
 
-    init() {
+    async init() {
         this.setupEventListeners();
         this.makeEditableCells();
         this.setupInteractiveCells();
         this.setupEditableTitle();
         
-        // Load the first table or create a new one
-        if (this.tables.length > 0) {
-            this.loadTable(this.tables[0].id);
-        } else {
-            this.createNewTable();
-        }
+        // Cargar tablas desde Firebase
+        await this.loadAllTablesFromFirebase();
     }
 
     setupEventListeners() {
@@ -27,7 +51,7 @@ class TableManager {
 
         // Save table button
         document.getElementById('saveTableBtn').addEventListener('click', () => {
-            this.saveCurrentTable();
+            this.saveCurrentTable(); // Ahora es asíncrono
         });
 
         // View tables button
@@ -42,7 +66,7 @@ class TableManager {
 
         // Name modal buttons
         document.getElementById('saveNameBtn').addEventListener('click', () => {
-            this.handleNameSave();
+            this.handleNameSave(); // Ahora es asíncrono
         });
 
         document.getElementById('cancelNameBtn').addEventListener('click', () => {
@@ -67,7 +91,8 @@ class TableManager {
     makeEditableCells() {
         document.querySelectorAll('.editable').forEach(cell => {
             cell.contentEditable = true;
-            cell.addEventListener('blur', () => this.autoSave());
+            // autoSave() ahora activa la sincronización con Firebase
+            cell.addEventListener('blur', () => this.autoSave()); 
             cell.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -117,21 +142,158 @@ class TableManager {
         this.autoSave();
     }
 
-    createNewTable() {
-        const tableId = 'table_' + Date.now();
-        const newTable = {
-            id: tableId,
-            name: 'Tabla Sin Nombre',
+    // =========================================================================
+    // MÉTODOS DE FIREBASE (REEMPLAZANDO localStorage)
+    // =========================================================================
+
+    /**
+     * Carga todas las tablas de Firestore.
+     */
+    async loadAllTablesFromFirebase() {
+        if (!this.db) return;
+
+        try {
+            // Ordenar por la fecha de actualización más reciente
+            const snapshot = await this.db.collection('customerJourneys').orderBy('updatedAt', 'desc').get();
+            
+            this.tables = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+            if (this.tables.length > 0) {
+                this.loadTable(this.tables[0].id);
+            } else {
+                // Si no hay tablas, crea una nueva y la guarda en Firebase
+                await this.createNewTable("Tabla Sin Nombre"); 
+                this.showNotification("Nueva sesión iniciada y conectada a Firebase.");
+            }
+        } catch (error) {
+            console.error("Error al cargar tablas de Firebase:", error);
+            this.showNotification("Error de sincronización: No se pudieron cargar las tablas.", 'error');
+        }
+    }
+
+    /**
+     * Crea una nueva tabla en Firestore.
+     */
+    async createNewTable(name = 'Tabla Sin Nombre') {
+        if (!this.db) return;
+        
+        // Limpiar el estado visual actual para la nueva tabla
+        this.loadTableData({ editableCells: {}, experienceCells: {}, markCells: {} });
+
+        const newTableData = {
+            name: name,
             data: this.getCurrentTableData(),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        this.tables.push(newTable);
-        this.currentTableId = tableId;
-        this.updateCurrentTableName(newTable.name);
-        this.saveTables();
+        try {
+            const docRef = await this.db.collection('customerJourneys').add(newTableData);
+            
+            // Asumiendo que el campo 'data' y 'name' se guardaron correctamente.
+            const newTable = {
+                id: docRef.id,
+                name: name,
+                data: newTableData.data,
+                // Las fechas serán timestamps locales para manejo inmediato en la UI.
+                createdAt: new Date().toISOString(), 
+                updatedAt: new Date().toISOString()
+            };
+
+            this.tables.unshift(newTable); // Agregar al inicio (más reciente)
+            this.currentTableId = docRef.id;
+            this.updateCurrentTableName(name);
+            this.showNotification(`Tabla "${name}" creada y sincronizada.`);
+        } catch (error) {
+            console.error("Error al crear nueva tabla en Firebase:", error);
+            this.showNotification('Error al crear tabla en la nube.', 'error');
+        }
     }
+
+    /**
+     * Guarda la tabla actual en Firestore (actualiza el documento).
+     */
+    async saveCurrentTable() {
+        if (!this.db || !this.currentTableId) return;
+
+        const table = this.tables.find(t => t.id === this.currentTableId);
+        if (table) {
+            const dataToUpdate = {
+                data: this.getCurrentTableData(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            try {
+                // Actualizar el documento en Firestore
+                await this.db.collection('customerJourneys').doc(this.currentTableId).update(dataToUpdate);
+                
+                // Actualizar la hora de actualización en el array local (para UI)
+                table.data = dataToUpdate.data;
+                table.updatedAt = new Date().toISOString(); 
+
+                this.showNotification('✅ Tabla sincronizada en Firebase');
+            } catch (error) {
+                console.error("Error al guardar en Firebase:", error);
+                this.showNotification('❌ Error de sincronización. Intenta de nuevo.', 'error');
+            }
+        }
+    }
+
+    /**
+     * Actualiza el nombre de la tabla en Firebase.
+     */
+    async updateTableNameInFirebase(tableId, newName) {
+        if (!this.db || !tableId) return;
+
+        try {
+            await this.db.collection('customerJourneys').doc(tableId).update({
+                name: newName,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            return true;
+        } catch (error) {
+            console.error("Error al renombrar en Firebase:", error);
+            this.showNotification('❌ Error al renombrar la tabla en la nube.', 'error');
+            return false;
+        }
+    }
+
+    /**
+     * Elimina una tabla de Firestore.
+     */
+    async deleteTable(tableId) {
+        if (!this.db) return;
+        if (!confirm('¿Está seguro de que desea eliminar esta tabla de la NUBE? Esta acción es irreversible.')) return;
+
+        try {
+            // Eliminar de Firestore
+            await this.db.collection('customerJourneys').doc(tableId).delete();
+            
+            // Eliminar del array local
+            this.tables = this.tables.filter(t => t.id !== tableId);
+            
+            if (this.currentTableId === tableId) {
+                if (this.tables.length > 0) {
+                    this.loadTable(this.tables[0].id);
+                } else {
+                    await this.createNewTable("Nueva Tabla"); // Crear una nueva si no quedan
+                }
+            }
+            
+            this.renderTablesList();
+            this.showNotification('Tabla eliminada exitosamente de Firebase');
+        } catch (error) {
+            console.error("Error al eliminar en Firebase:", error);
+            this.showNotification('Error al eliminar tabla en la nube.', 'error');
+        }
+    }
+
+    // =========================================================================
+    // MÉTODOS EXISTENTES CON AJUSTES (USANDO ASYNC/AWAIT)
+    // =========================================================================
 
     loadTable(tableId) {
         const table = this.tables.find(t => t.id === tableId);
@@ -139,9 +301,10 @@ class TableManager {
 
         this.currentTableId = tableId;
         this.updateCurrentTableName(table.name);
+        // La estructura de datos (table.data) sigue siendo la misma, solo cambia la fuente.
         this.loadTableData(table.data);
     }
-
+    
     getCurrentTableData() {
         const data = {
             editableCells: {},
@@ -210,25 +373,11 @@ class TableManager {
         });
     }
 
-    saveCurrentTable() {
-        if (!this.currentTableId) return;
-
-        const table = this.tables.find(t => t.id === this.currentTableId);
-        if (table) {
-            table.data = this.getCurrentTableData();
-            table.updatedAt = new Date().toISOString();
-            this.saveTables();
-            
-            // Show save confirmation
-            this.showNotification('Tabla guardada exitosamente');
-        }
-    }
-
     autoSave() {
         if (this.currentTableId) {
             clearTimeout(this.autoSaveTimeout);
             this.autoSaveTimeout = setTimeout(() => {
-                this.saveCurrentTable();
+                this.saveCurrentTable(); // Llamada asíncrona a Firebase
             }, 1000);
         }
     }
@@ -253,27 +402,25 @@ class TableManager {
         document.getElementById('nameModal').style.display = 'none';
     }
 
-    handleNameSave() {
+    async handleNameSave() {
         const name = document.getElementById('tableNameInput').value.trim();
         if (!name) return;
 
         if (this.nameModalAction === 'new') {
-            this.createNewTable();
-            const table = this.tables.find(t => t.id === this.currentTableId);
-            if (table) {
-                table.name = name;
-                this.updateCurrentTableName(name);
-                this.saveTables();
-            }
+            // El nombre se pasa a createNewTable, que maneja la sincronización
+            await this.createNewTable(name); 
         } else if (this.nameModalAction === 'rename' && this.nameModalTableId) {
-            const table = this.tables.find(t => t.id === this.nameModalTableId);
-            if (table) {
-                table.name = name;
-                if (this.currentTableId === this.nameModalTableId) {
-                    this.updateCurrentTableName(name);
+            // Actualiza el nombre en Firebase y actualiza el array local si es exitoso
+            const success = await this.updateTableNameInFirebase(this.nameModalTableId, name);
+            if (success) {
+                const table = this.tables.find(t => t.id === this.nameModalTableId);
+                if (table) {
+                    table.name = name;
+                    if (this.currentTableId === this.nameModalTableId) {
+                        this.updateCurrentTableName(name);
+                    }
+                    this.renderTablesList();
                 }
-                this.saveTables();
-                this.renderTablesList();
             }
         }
 
@@ -293,7 +440,7 @@ class TableManager {
         const container = document.getElementById('tablesList');
         
         if (this.tables.length === 0) {
-            container.innerHTML = '<p>No hay tablas guardadas.</p>';
+            container.innerHTML = '<p>No hay tablas guardadas en Firebase.</p>';
             return;
         }
 
@@ -301,7 +448,9 @@ class TableManager {
             <div class="table-item">
                 <div class="table-info">
                     <div class="table-name">${table.name}</div>
-                    <div class="table-date">Creado: ${new Date(table.createdAt).toLocaleDateString()}</div>
+                    <div class="table-date">
+                        Actualizado: ${new Date(table.updatedAt).toLocaleDateString()}
+                    </div>
                 </div>
                 <div class="table-actions">
                     <button class="btn-primary btn-small" onclick="tableManager.loadTable('${table.id}'); tableManager.hideTablesModal();">
@@ -316,23 +465,6 @@ class TableManager {
                 </div>
             </div>
         `).join('');
-    }
-
-    deleteTable(tableId) {
-        if (confirm('¿Está seguro de que desea eliminar esta tabla?')) {
-            this.tables = this.tables.filter(t => t.id !== tableId);
-            this.saveTables();
-            
-            if (this.currentTableId === tableId) {
-                if (this.tables.length > 0) {
-                    this.loadTable(this.tables[0].id);
-                } else {
-                    this.createNewTable();
-                }
-            }
-            
-            this.renderTablesList();
-        }
     }
 
     setupEditableTitle() {
@@ -377,7 +509,7 @@ class TableManager {
         selection.addRange(range);
     }
 
-    finishEditingTitle() {
+    async finishEditingTitle() {
         const titleElement = document.getElementById('currentTableName');
         
         if (!titleElement.classList.contains('editing')) {
@@ -386,7 +518,6 @@ class TableManager {
         
         const newName = titleElement.textContent.trim();
         
-        // Validate name
         if (!newName || newName.length === 0) {
             titleElement.textContent = this.originalTitleText;
             this.cancelEditingTitle();
@@ -395,12 +526,16 @@ class TableManager {
         
         // Update the current table name
         if (this.currentTableId) {
-            const table = this.tables.find(t => t.id === this.currentTableId);
-            if (table) {
-                table.name = newName;
-                table.updatedAt = new Date().toISOString();
-                this.saveTables();
-                this.showNotification('Nombre de tabla actualizado');
+            const success = await this.updateTableNameInFirebase(this.currentTableId, newName);
+            if (success) {
+                const table = this.tables.find(t => t.id === this.currentTableId);
+                if (table) {
+                    table.name = newName;
+                    this.showNotification('Nombre de tabla actualizado y sincronizado');
+                }
+            } else {
+                 // Revertir el nombre si la sincronización falla
+                titleElement.textContent = this.originalTitleText;
             }
         }
         
@@ -648,14 +783,16 @@ class TableManager {
         });
     }
 
-    showNotification(message) {
+    showNotification(message, type = 'success') {
         const notification = document.createElement('div');
         notification.textContent = message;
+        let background = type === 'success' ? '#28a745' : '#dc3545';
+        
         notification.style.cssText = `
             position: fixed;
             top: 20px;
             right: 20px;
-            background: #28a745;
+            background: ${background};
             color: white;
             padding: 1rem;
             border-radius: 4px;
@@ -668,15 +805,8 @@ class TableManager {
             notification.remove();
         }, 3000);
     }
-
-    loadTables() {
-        const saved = localStorage.getItem('customerJourneyTables');
-        return saved ? JSON.parse(saved) : [];
-    }
-
-    saveTables() {
-        localStorage.setItem('customerJourneyTables', JSON.stringify(this.tables));
-    }
+    
+    // Los métodos loadTables() y saveTables() originales (de localStorage) fueron eliminados.
 }
 
 // Initialize the table manager when the page loads
