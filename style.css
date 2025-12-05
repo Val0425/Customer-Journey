@@ -40,6 +40,17 @@ body {
     padding-right: 20px;
 }
 
+.row-label.child-label {
+    padding-right: 35px;
+    /* Indent child labels */
+    font-weight: 500;
+}
+
+.row-label.grandchild-label {
+    padding-right: 50px;
+    /* Indent grandchild labels */
+}
+
 .row-label.sub-label {
     background-color: #FAFBFC;
     font-weight: 400;
