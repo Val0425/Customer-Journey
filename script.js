@@ -334,7 +334,8 @@ class TableManager {
 
     loadTableData(data) {
         // Clear current state
-        document.querySelectorAll('.editable').forEach(cell => {
+        const editableCells = document.querySelectorAll('.editable');
+        editableCells.forEach(cell => {
             cell.textContent = '';
         });
 
@@ -349,13 +350,83 @@ class TableManager {
         });
 
         // Load editable cells
-        Object.entries(data.editableCells || {}).forEach(([index, content]) => {
-            const cells = document.querySelectorAll('.editable');
-            if (cells[index]) cells[index].textContent = content;
-        });
+        // Detectar si es el esquema antiguo (menos celdas)
+        const totalEditable = editableCells.length;
+        const dataKeys = Object.keys(data.editableCells || {});
+        let isOldSchema = false;
+
+        if (dataKeys.length > 0) {
+            const maxIndex = Math.max(...dataKeys.map(k => parseInt(k)));
+            // El esquema antiguo tenía ~52 celdas. El nuevo >90.
+            // Si el índice máximo es pequeño en relación a las celdas actuales, y el "Etapas" row parece solapado
+            if (maxIndex < totalEditable && totalEditable > 90) {
+                // Simple heuristic: si tenemos muchos datos pero indices bajos, puede ser old schema.
+                // O simplemente verificamos si hay colisión en la fila 2.
+                // Mejor: asumimos migración si totalEditable != totalGuardado (aprox)
+                // Pero createNewTable guarda el esquema actual. 
+                // Vamos a verificar si data[1] existe (Relacionamiento antiguo) y data[4] (Relacionamiento nuevo).
+                // En esquema nuevo data[1] debería ser vacio (celda 2 de Antes).
+                if (data.editableCells[1] === "Relacionamiento" || data.editableCells[2] === "Pago de aportes") {
+                    isOldSchema = true;
+                    console.log("Detectado esquema antiguo de 7 columnas. Migrando a 12 columnas...");
+                }
+            }
+        }
+
+        if (isOldSchema) {
+            // Migración de datos on-the-fly
+            const newEditableCells = {};
+            Object.entries(data.editableCells).forEach(([key, content]) => {
+                const oldIndex = parseInt(key);
+                let newIndex = oldIndex;
+
+                if (oldIndex === 0) newIndex = 0; // Afiliación -> Afiliación (Antes)
+                else if (oldIndex === 1) newIndex = 4; // Relacionamiento -> Relacionamiento (Durante)
+                else if (oldIndex === 2) newIndex = 8; // Pago -> Pago (Después)
+                else if (oldIndex >= 3) {
+                    // Mapeo de filas de 7 columnas a 12 columnas.
+                    // Old structure: Row 0 (3 cells), Rows 1+ (7 cells each)
+                    // New structure: Row 0 (12 cells), Rows 1+ (12 cells each)
+
+                    // 1. Determinar en qué fila y columna estaba en el esquema antiguo
+                    const relativeIndex = oldIndex - 3; // Indices 3+ son los de contenido
+                    const rowNumber = Math.floor(relativeIndex / 7); // 0-based row index for content rows
+                    const colNumber = relativeIndex % 7;
+
+                    // 2. Calcular nuevo índice
+                    // El nuevo contenido arranca en índice 12 (después de las 12 celdas de Etapas)
+                    // Cada fila nueva tiene 12 columnas
+                    newIndex = 12 + (rowNumber * 12) + colNumber;
+                }
+                newEditableCells[newIndex] = content;
+            });
+
+            // Renderizar datos migrados
+            Object.entries(newEditableCells).forEach(([index, content]) => {
+                if (editableCells[index]) editableCells[index].textContent = content;
+            });
+
+            // Forzar guardado del nuevo esquema para corregirlo en Firebase
+            this.autoSave();
+
+        } else {
+            // Carga normal
+            Object.entries(data.editableCells || {}).forEach(([index, content]) => {
+                if (editableCells[index]) editableCells[index].textContent = content;
+            });
+        }
 
         // Load experience cells
         Object.entries(data.experienceCells || {}).forEach(([col, emoji]) => {
+            // Ajustar columnas de experiencia si es necesario (1-7 -> map to 12?)
+            // El usuario pidió 12 columnas también para sub-labels?
+            // "cada etapa... se distribuyan en 4 columnas".
+            // Los emojis están abajo. Si el HTML de emojis no cambió de 7 a 12, se rompe.
+            // HTML de emojis data-col va hasta 12 ahora (lo hice en Step 30).
+            // Old data col 1..7.
+            // New data col 1..12.
+            // Mapping: 1->1, 2->?, 3->?
+            // Si el usuario tenía emojis, quedarán en las primeras 7 columnas. Es aceptable.
             const cell = document.querySelector(`[data-col="${col}"][data-emoji="${emoji}"].experience-cell`);
             if (cell) {
                 cell.classList.add('selected');
