@@ -885,3 +885,4 @@ let tableManager;
 document.addEventListener('DOMContentLoaded', () => {
     tableManager = new TableManager();
 });
+
