@@ -3,7 +3,7 @@ class TableManager {
         this.currentTableId = null;
         this.tables = []; // Data se cargará asíncronamente desde Firebase
         this.db = null;
-        
+
         // =========================================================================
         // 🔑 CONFIGURACIÓN DE FIREBASE INYECTADA
         // =========================================================================
@@ -29,7 +29,7 @@ class TableManager {
             console.error("Error al inicializar Firebase:", error);
             this.showNotification("Error: No se pudo conectar a Firebase. Revisa las credenciales.", 'error');
         }
-        
+
         this.init();
     }
 
@@ -38,7 +38,7 @@ class TableManager {
         this.makeEditableCells();
         this.setupInteractiveCells();
         this.setupEditableTitle();
-        
+
         // Cargar tablas desde Firebase
         await this.loadAllTablesFromFirebase();
     }
@@ -92,7 +92,7 @@ class TableManager {
         document.querySelectorAll('.editable').forEach(cell => {
             cell.contentEditable = true;
             // autoSave() ahora activa la sincronización con Firebase
-            cell.addEventListener('blur', () => this.autoSave()); 
+            cell.addEventListener('blur', () => this.autoSave());
             cell.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -120,7 +120,7 @@ class TableManager {
 
     toggleExperienceCell(cell) {
         const isSelected = cell.classList.contains('selected');
-        
+
         // Clear other selections in the same column
         const col = cell.dataset.col;
         document.querySelectorAll(`[data-col="${col}"].experience-cell`).forEach(c => {
@@ -155,7 +155,7 @@ class TableManager {
         try {
             // Ordenar por la fecha de actualización más reciente
             const snapshot = await this.db.collection('customerJourneys').orderBy('updatedAt', 'desc').get();
-            
+
             this.tables = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -165,7 +165,7 @@ class TableManager {
                 this.loadTable(this.tables[0].id);
             } else {
                 // Si no hay tablas, crea una nueva y la guarda en Firebase
-                await this.createNewTable("Tabla Sin Nombre"); 
+                await this.createNewTable("Tabla Sin Nombre");
                 this.showNotification("Nueva sesión iniciada y conectada a Firebase.");
             }
         } catch (error) {
@@ -179,7 +179,7 @@ class TableManager {
      */
     async createNewTable(name = 'Tabla Sin Nombre') {
         if (!this.db) return;
-        
+
         // Limpiar el estado visual actual para la nueva tabla
         this.loadTableData({ editableCells: {}, experienceCells: {}, markCells: {} });
 
@@ -192,14 +192,14 @@ class TableManager {
 
         try {
             const docRef = await this.db.collection('customerJourneys').add(newTableData);
-            
+
             // Asumiendo que el campo 'data' y 'name' se guardaron correctamente.
             const newTable = {
                 id: docRef.id,
                 name: name,
                 data: newTableData.data,
                 // Las fechas serán timestamps locales para manejo inmediato en la UI.
-                createdAt: new Date().toISOString(), 
+                createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
 
@@ -229,10 +229,10 @@ class TableManager {
             try {
                 // Actualizar el documento en Firestore
                 await this.db.collection('customerJourneys').doc(this.currentTableId).update(dataToUpdate);
-                
+
                 // Actualizar la hora de actualización en el array local (para UI)
                 table.data = dataToUpdate.data;
-                table.updatedAt = new Date().toISOString(); 
+                table.updatedAt = new Date().toISOString();
 
                 this.showNotification('✅ Tabla sincronizada en Firebase');
             } catch (error) {
@@ -271,10 +271,10 @@ class TableManager {
         try {
             // Eliminar de Firestore
             await this.db.collection('customerJourneys').doc(tableId).delete();
-            
+
             // Eliminar del array local
             this.tables = this.tables.filter(t => t.id !== tableId);
-            
+
             if (this.currentTableId === tableId) {
                 if (this.tables.length > 0) {
                     this.loadTable(this.tables[0].id);
@@ -282,7 +282,7 @@ class TableManager {
                     await this.createNewTable("Nueva Tabla"); // Crear una nueva si no quedan
                 }
             }
-            
+
             this.renderTablesList();
             this.showNotification('Tabla eliminada exitosamente de Firebase');
         } catch (error) {
@@ -304,7 +304,7 @@ class TableManager {
         // La estructura de datos (table.data) sigue siendo la misma, solo cambia la fuente.
         this.loadTableData(table.data);
     }
-    
+
     getCurrentTableData() {
         const data = {
             editableCells: {},
@@ -385,7 +385,7 @@ class TableManager {
     showNameModal(action, tableId = null) {
         this.nameModalAction = action;
         this.nameModalTableId = tableId;
-        
+
         const input = document.getElementById('tableNameInput');
         if (action === 'rename' && tableId) {
             const table = this.tables.find(t => t.id === tableId);
@@ -393,7 +393,7 @@ class TableManager {
         } else {
             input.value = '';
         }
-        
+
         document.getElementById('nameModal').style.display = 'block';
         input.focus();
     }
@@ -408,7 +408,7 @@ class TableManager {
 
         if (this.nameModalAction === 'new') {
             // El nombre se pasa a createNewTable, que maneja la sincronización
-            await this.createNewTable(name); 
+            await this.createNewTable(name);
         } else if (this.nameModalAction === 'rename' && this.nameModalTableId) {
             // Actualiza el nombre en Firebase y actualiza el array local si es exitoso
             const success = await this.updateTableNameInFirebase(this.nameModalTableId, name);
@@ -438,7 +438,7 @@ class TableManager {
 
     renderTablesList() {
         const container = document.getElementById('tablesList');
-        
+
         if (this.tables.length === 0) {
             container.innerHTML = '<p>No hay tablas guardadas en Firebase.</p>';
             return;
@@ -469,11 +469,11 @@ class TableManager {
 
     setupEditableTitle() {
         const titleElement = document.getElementById('currentTableName');
-        
+
         titleElement.addEventListener('click', () => {
             this.startEditingTitle();
         });
-        
+
         titleElement.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -483,7 +483,7 @@ class TableManager {
                 this.cancelEditingTitle();
             }
         });
-        
+
         titleElement.addEventListener('blur', () => {
             this.finishEditingTitle();
         });
@@ -492,15 +492,15 @@ class TableManager {
     startEditingTitle() {
         const titleElement = document.getElementById('currentTableName');
         const currentText = titleElement.textContent;
-        
+
         // Store original text in case we need to cancel
         this.originalTitleText = currentText;
-        
+
         // Make it editable
         titleElement.contentEditable = true;
         titleElement.classList.add('editing');
         titleElement.focus();
-        
+
         // Select all text
         const range = document.createRange();
         range.selectNodeContents(titleElement);
@@ -511,19 +511,19 @@ class TableManager {
 
     async finishEditingTitle() {
         const titleElement = document.getElementById('currentTableName');
-        
+
         if (!titleElement.classList.contains('editing')) {
             return;
         }
-        
+
         const newName = titleElement.textContent.trim();
-        
+
         if (!newName || newName.length === 0) {
             titleElement.textContent = this.originalTitleText;
             this.cancelEditingTitle();
             return;
         }
-        
+
         // Update the current table name
         if (this.currentTableId) {
             const success = await this.updateTableNameInFirebase(this.currentTableId, newName);
@@ -534,16 +534,16 @@ class TableManager {
                     this.showNotification('Nombre de tabla actualizado y sincronizado');
                 }
             } else {
-                 // Revertir el nombre si la sincronización falla
+                // Revertir el nombre si la sincronización falla
                 titleElement.textContent = this.originalTitleText;
             }
         }
-        
+
         // Clean up editing state
         titleElement.contentEditable = false;
         titleElement.classList.remove('editing');
         titleElement.blur();
-        
+
         // Clear selection
         window.getSelection().removeAllRanges();
     }
@@ -566,47 +566,47 @@ class TableManager {
     exportToPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF('l', 'mm', 'a3'); // A3 horizontal para mejor espacio
-        
+
         const currentTable = this.tables.find(t => t.id === this.currentTableId);
         const tableName = currentTable ? currentTable.name : 'Tabla Sin Nombre';
-        
+
         // Configuración
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 10;
         const tableWidth = pageWidth - (margin * 2);
-        
+
         // Dimensiones de la tabla
         const labelColumnWidth = 60; // Ancho para las etiquetas
-        const dataColumnWidth = (tableWidth - labelColumnWidth) / 7; // 7 columnas de datos
+        const dataColumnWidth = (tableWidth - labelColumnWidth) / 12; // 12 columnas de datos
         const rowHeight = 12;
-        
+
         let yPosition = 15;
-        
+
         // Encabezado del documento
         doc.setFillColor(0, 123, 255);
         doc.rect(0, 0, pageWidth, 25, 'F');
-        
+
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(16);
         doc.setFont(undefined, 'bold');
         doc.text(tableName, margin, 15);
-        
+
         doc.setFontSize(10);
         const now = new Date();
-        doc.text(`Generado: ${now.toLocaleDateString('es-ES')} ${now.toLocaleTimeString('es-ES')}`, 
-                 pageWidth - margin - 50, 20);
-        
+        doc.text(`Generado: ${now.toLocaleDateString('es-ES')} ${now.toLocaleTimeString('es-ES')}`,
+            pageWidth - margin - 50, 20);
+
         yPosition = 35;
         doc.setTextColor(0, 0, 0);
-        
+
         // Dibujar encabezados de fases (ANTES, DURANTE, DESPUÉS)
         this.drawPhaseHeaders(doc, yPosition, margin, labelColumnWidth, dataColumnWidth, rowHeight);
         yPosition += rowHeight;
-        
+
         // Obtener todas las filas de la tabla
         const tableRows = this.getTableRows();
-        
+
         // Dibujar cada fila
         tableRows.forEach(row => {
             // Verificar si necesitamos nueva página
@@ -617,11 +617,11 @@ class TableManager {
                 this.drawPhaseHeaders(doc, yPosition, margin, labelColumnWidth, dataColumnWidth, rowHeight);
                 yPosition += rowHeight;
             }
-            
+
             this.drawTableRow(doc, row, yPosition, margin, labelColumnWidth, dataColumnWidth, rowHeight);
             yPosition += rowHeight;
         });
-        
+
         // Guardar PDF
         const fileName = `${tableName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
         doc.save(fileName);
@@ -632,24 +632,24 @@ class TableManager {
         // Celda vacía para las etiquetas
         doc.setFillColor(255, 255, 255); // Blanco como en la web
         doc.rect(margin, yPosition, labelColumnWidth, rowHeight, 'FD');
-        
+
         // Configurar estilo común para todos los encabezados (mismo color que en CSS)
         doc.setFillColor(222, 235, 255); // #DEEBFF del CSS
         doc.setTextColor(0, 82, 204); // #0052CC del CSS
         doc.setFontSize(10);
         doc.setFont(undefined, 'bold');
-        
+
         // Encabezado ANTES (4 columnas)
         doc.rect(margin + labelColumnWidth, yPosition, dataColumnWidth * 4, rowHeight, 'FD');
         doc.text('ANTES', margin + labelColumnWidth + (dataColumnWidth * 2) - 10, yPosition + 8);
-        
-        // Encabezado DURANTE (1 columna) - mismo color de fondo
-        doc.rect(margin + labelColumnWidth + (dataColumnWidth * 4), yPosition, dataColumnWidth, rowHeight, 'FD');
-        doc.text('DURANTE', margin + labelColumnWidth + (dataColumnWidth * 4.5) - 12, yPosition + 8);
-        
-        // Encabezado DESPUÉS (2 columnas) - mismo color de fondo
-        doc.rect(margin + labelColumnWidth + (dataColumnWidth * 5), yPosition, dataColumnWidth * 2, rowHeight, 'FD');
-        doc.text('DESPUÉS', margin + labelColumnWidth + (dataColumnWidth * 6) - 12, yPosition + 8);
+
+        // Encabezado DURANTE (4 columnas) - mismo color de fondo
+        doc.rect(margin + labelColumnWidth + (dataColumnWidth * 4), yPosition, dataColumnWidth * 4, rowHeight, 'FD');
+        doc.text('DURANTE', margin + labelColumnWidth + (dataColumnWidth * 6) - 12, yPosition + 8);
+
+        // Encabezado DESPUÉS (4 columnas) - mismo color de fondo
+        doc.rect(margin + labelColumnWidth + (dataColumnWidth * 8), yPosition, dataColumnWidth * 4, rowHeight, 'FD');
+        doc.text('DESPUÉS', margin + labelColumnWidth + (dataColumnWidth * 10) - 12, yPosition + 8);
     }
 
     drawTableRow(doc, row, yPosition, margin, labelColumnWidth, dataColumnWidth, rowHeight) {
@@ -663,23 +663,23 @@ class TableManager {
             doc.setTextColor(0, 0, 0);
             doc.setFontSize(9);
         }
-        
+
         doc.rect(margin, yPosition, labelColumnWidth, rowHeight, 'FD');
         doc.setFont(undefined, row.isSubLabel ? 'normal' : 'bold');
-        
+
         // Ajustar texto de la etiqueta
         const labelLines = doc.splitTextToSize(row.label, labelColumnWidth - 4);
         doc.text(labelLines, margin + 2, yPosition + 7);
-        
+
         // Dibujar celdas de datos
         doc.setTextColor(0, 0, 0);
         doc.setFontSize(8);
         doc.setFont(undefined, 'normal');
-        
+
         row.cells.forEach((cell, index) => {
             const cellX = margin + labelColumnWidth + (index * dataColumnWidth);
             const cellWidth = dataColumnWidth * (cell.colspan || 1);
-            
+
             // Color de fondo según el tipo de celda
             if (cell.isSelected) {
                 doc.setFillColor(227, 252, 239); // Verde claro para seleccionadas
@@ -688,9 +688,9 @@ class TableManager {
             } else {
                 doc.setFillColor(255, 255, 255); // Blanco para normales
             }
-            
+
             doc.rect(cellX, yPosition, cellWidth, rowHeight, 'FD');
-            
+
             // Contenido de la celda
             if (cell.content) {
                 const cellLines = doc.splitTextToSize(cell.content, cellWidth - 4);
@@ -703,16 +703,16 @@ class TableManager {
         const rows = [];
         const container = document.querySelector('.container');
         const elements = Array.from(container.children);
-        
+
         let currentRow = null;
-        
+
         elements.forEach(element => {
             if (element.classList.contains('row-label')) {
                 // Si hay una fila anterior, agregarla
                 if (currentRow) {
                     rows.push(currentRow);
                 }
-                
+
                 // Crear nueva fila
                 currentRow = {
                     label: element.textContent.trim(),
@@ -727,35 +727,35 @@ class TableManager {
                     isSelected: element.classList.contains('selected'),
                     isMarked: element.classList.contains('marked')
                 };
-                
+
                 currentRow.cells.push(cell);
             }
         });
-        
+
         // Agregar la última fila
         if (currentRow) {
             rows.push(currentRow);
         }
-        
+
         return this.processTableRows(rows);
     }
 
     processTableRows(rows) {
-        // Procesar filas para manejar colspan y asegurar 7 columnas
+        // Procesar filas para manejar colspan y asegurar 12 columnas
         return rows.map(row => {
             const processedCells = [];
             let currentColumn = 0;
-            
+
             row.cells.forEach(cell => {
                 const colspan = cell.colspan || 1;
-                
+
                 // Agregar la celda
                 processedCells.push({
                     ...cell,
                     startColumn: currentColumn,
                     endColumn: currentColumn + colspan - 1
                 });
-                
+
                 // Agregar celdas vacías para el colspan si es mayor a 1
                 for (let i = 1; i < colspan; i++) {
                     processedCells.push({
@@ -764,21 +764,21 @@ class TableManager {
                         colspan: 1
                     });
                 }
-                
+
                 currentColumn += colspan;
             });
-            
-            // Rellenar hasta 7 columnas si es necesario
-            while (processedCells.length < 7) {
+
+            // Rellenar hasta 12 columnas si es necesario
+            while (processedCells.length < 12) {
                 processedCells.push({
                     content: '',
                     colspan: 1
                 });
             }
-            
+
             return {
                 ...row,
-                cells: processedCells.slice(0, 7) // Asegurar máximo 7 columnas
+                cells: processedCells.slice(0, 12) // Asegurar máximo 12 columnas
             };
         });
     }
@@ -787,7 +787,7 @@ class TableManager {
         const notification = document.createElement('div');
         notification.textContent = message;
         let background = type === 'success' ? '#28a745' : '#dc3545';
-        
+
         notification.style.cssText = `
             position: fixed;
             top: 20px;
@@ -799,13 +799,13 @@ class TableManager {
             z-index: 2000;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         `;
-        
+
         document.body.appendChild(notification);
         setTimeout(() => {
             notification.remove();
         }, 3000);
     }
-    
+
     // Los métodos loadTables() y saveTables() originales (de localStorage) fueron eliminados.
 }
 
