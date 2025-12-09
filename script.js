@@ -186,6 +186,7 @@ class TableManager {
         const newTableData = {
             name: name,
             data: this.getCurrentTableData(),
+            schemaVersion: 2, // Explicit versioning to avoid migration issues
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
@@ -223,6 +224,7 @@ class TableManager {
         if (table) {
             const dataToUpdate = {
                 data: this.getCurrentTableData(),
+                schemaVersion: 2, // Explicit versioning
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
@@ -355,22 +357,18 @@ class TableManager {
         const dataKeys = Object.keys(data.editableCells || {});
         let isOldSchema = false;
 
-        if (dataKeys.length > 0) {
-            const maxIndex = Math.max(...dataKeys.map(k => parseInt(k)));
-            // El esquema antiguo tenía ~52 celdas. El nuevo >90.
-            // Si el índice máximo es pequeño en relación a las celdas actuales, y el "Etapas" row parece solapado
-            if (maxIndex < totalEditable && totalEditable > 90) {
-                // Simple heuristic: si tenemos muchos datos pero indices bajos, puede ser old schema.
-                // O simplemente verificamos si hay colisión en la fila 2.
-                // Mejor: asumimos migración si totalEditable != totalGuardado (aprox)
-                // Pero createNewTable guarda el esquema actual. 
-                // Vamos a verificar si data[1] existe (Relacionamiento antiguo) y data[4] (Relacionamiento nuevo).
-                // En esquema nuevo data[1] debería ser vacio (celda 2 de Antes).
-                if (data.editableCells[1] === "Relacionamiento" || data.editableCells[2] === "Pago de aportes") {
-                    isOldSchema = true;
-                    console.log("Detectado esquema antiguo de 7 columnas. Migrando a 12 columnas...");
-                }
-            }
+        // Mejora en la detección: Usar cantidad de celdas en lugar de contenido.
+        // El esquema antiguo (7 columnas) tenía ~52 celdas editables.
+        // El nuevo esquema (12 columnas) tiene > 100.
+        // Si hay datos, pero son pocos (< 80), asumimos que es el esquema antiguo.
+        // Check for explicit schema version first
+        if (data.schemaVersion === 2) {
+            isOldSchema = false;
+        }
+        // Fallback: Check heuristics if no version is present
+        else if (dataKeys.length > 0 && dataKeys.length < 80) {
+            isOldSchema = true;
+            console.log("Detectado esquema antiguo por cantidad de celdas (" + dataKeys.length + "). Migrando...");
         }
 
         if (isOldSchema) {
