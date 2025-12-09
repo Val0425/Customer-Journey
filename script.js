@@ -199,6 +199,7 @@ class TableManager {
                 id: docRef.id,
                 name: name,
                 data: newTableData.data,
+                schemaVersion: 2, // Ensure local object has version
                 // Las fechas serán timestamps locales para manejo inmediato en la UI.
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -303,8 +304,8 @@ class TableManager {
 
         this.currentTableId = tableId;
         this.updateCurrentTableName(table.name);
-        // La estructura de datos (table.data) sigue siendo la misma, solo cambia la fuente.
-        this.loadTableData(table.data);
+        // Pass schemaVersion explicitly
+        this.loadTableData(table.data, table.schemaVersion);
     }
 
     getCurrentTableData() {
@@ -334,7 +335,7 @@ class TableManager {
         return data;
     }
 
-    loadTableData(data) {
+    loadTableData(data, schemaVersion) {
         // Clear current state
         const editableCells = document.querySelectorAll('.editable');
         editableCells.forEach(cell => {
@@ -361,8 +362,8 @@ class TableManager {
         // El esquema antiguo (7 columnas) tenía ~52 celdas editables.
         // El nuevo esquema (12 columnas) tiene > 100.
         // Si hay datos, pero son pocos (< 80), asumimos que es el esquema antiguo.
-        // Check for explicit schema version first
-        if (data.schemaVersion === 2) {
+        // Check for explicit schema version passed as argument
+        if (schemaVersion === 2) {
             isOldSchema = false;
         }
         // Fallback: Check heuristics if no version is present
