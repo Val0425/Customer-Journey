@@ -384,3 +384,46 @@ body {
         max-width: none;
     }
 }
+
+/* Sub-cuadrados dentro de celdas vacías */
+
+.subcells {
+    /* Sub-cuadrados con ancho automático y comportamiento responsivo.
+       - `auto-fit` permite que el grid se adapte al ancho disponible.
+       - `minmax(160px, 1fr)` da un ancho mínimo y deja que crezcan proporcionalmente.
+       Esto mantiene las cajas anchas en pantallas grandes y permite wrap en pantallas pequeñas. */
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    width: 100%;
+    align-items: start;
+    grid-auto-rows: minmax(96px, auto); /* filas autoajustables en altura */
+}
+
+.subcell {
+    width: 100%;
+    min-height: 96px; /* más grande para permitir escritura cómoda */
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 12px;
+    box-sizing: border-box;
+    font-size: 1rem;
+    line-height: 1.3;
+    /* Preferir que el texto fluya en línea horizontal y que las palabras se ajusten al ancho disponible */
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    hyphens: auto; /* ayuda al ajuste de palabras en algunos idiomas/navegadores */
+}
+
+.cell .subcells { /* asegurar separación interior */
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.subcell:focus {
+    outline: 2px solid #4C9AFF;
+    background: #f7fbff;
+}

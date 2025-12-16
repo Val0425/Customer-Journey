@@ -35,10 +35,12 @@ class TableManager {
 
     async init() {
         this.setupEventListeners();
+        // Primero asegurarnos de que las celdas editables tengan sub-cuadrados
+        this.insertSubcellsToEditableCells();
+        // Luego habilitar la edición en los sub-cuadrados
         this.makeEditableCells();
         this.setupInteractiveCells();
         this.setupEditableTitle();
-
         // Cargar tablas desde Firebase
         await this.loadAllTablesFromFirebase();
     }
@@ -89,16 +91,36 @@ class TableManager {
     }
 
     makeEditableCells() {
-        document.querySelectorAll('.editable').forEach(cell => {
-            cell.contentEditable = true;
-            // autoSave() ahora activa la sincronización con Firebase
-            cell.addEventListener('blur', () => this.autoSave());
-            cell.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    cell.blur();
+        // Aplicar contentEditable y handlers a subcells si existen
+        document.querySelectorAll('.cell.editable .subcell').forEach(sub => {
+            sub.contentEditable = true;
+            if (!sub.dataset._listenersAttached) {
+                sub.addEventListener('blur', () => this.autoSave());
+                sub.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sub.blur();
+                    }
+                });
+                sub.dataset._listenersAttached = '1';
+            }
+        });
+
+        // Para celdas editables que NO tengan subcells (filas excluidas), asegúrate de que la celda sea editable
+        document.querySelectorAll('.cell.editable').forEach(cell => {
+            if (!cell.querySelector('.subcells')) {
+                if (!cell.dataset._cellListenersAttached) {
+                    cell.contentEditable = true;
+                    cell.addEventListener('blur', () => this.autoSave());
+                    cell.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            cell.blur();
+                        }
+                    });
+                    cell.dataset._cellListenersAttached = '1';
                 }
-            });
+            }
         });
     }
 
@@ -115,6 +137,110 @@ class TableManager {
             cell.addEventListener('click', () => {
                 this.toggleMarkCell(cell);
             });
+        });
+    }
+
+    /**
+     * Inserta 4 sub-cuadrados editables en cada celda `.editable`.
+     * - Si la celda ya contiene texto, ese texto se mueve al primer subcuadro.
+     * - Evita tocar celdas que sean `.experience-cell` o `.mark-cell`.
+     */
+    insertSubcellsToEditableCells() {
+    // Insert subcells only for editable cells that belong to allowed rows.
+    // Añadido 'Puntos de contacto' a la lista de filas excluidas por petición del usuario.
+    const excludedRows = new Set(['Etapas', 'Nivel de Experiencia', 'Emociones', 'Verbatims', 'Puntos de contacto']);
+        const container = document.querySelector('.container');
+        if (!container) return;
+
+        let currentRowLabel = '';
+        Array.from(container.children).forEach(child => {
+            if (child.classList.contains('row-label')) {
+                currentRowLabel = child.textContent.trim();
+                return;
+            }
+
+            if (child.classList && child.classList.contains('cell') && child.classList.contains('editable')) {
+                // Skip interactive kinds
+                if (child.classList.contains('experience-cell') || child.classList.contains('mark-cell')) return;
+
+                const shouldExclude = excludedRows.has(currentRowLabel);
+
+                const existing = child.querySelector('.subcells');
+
+                if (shouldExclude) {
+                    // If this cell already has subcells, convert back to a single editable region
+                    if (existing) {
+                        const firstText = (existing.querySelector('.subcell')?.textContent || '').trim();
+                        child.innerHTML = '';
+                        child.textContent = firstText; // put existing text back into the cell
+                        // make the cell itself editable so behavior remains
+                        child.contentEditable = true;
+                        child.addEventListener('blur', () => this.autoSave());
+                        child.addEventListener('keypress', (e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                child.blur();
+                            }
+                        });
+                    } else {
+                        // Ensure cell is editable (no subcells) for excluded rows
+                        child.contentEditable = true;
+                        child.addEventListener('blur', () => this.autoSave());
+                        child.addEventListener('keypress', (e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                child.blur();
+                            }
+                        });
+                    }
+
+                    return;
+                }
+
+                // Allowed row: ensure has subcells
+                if (existing) {
+                    // nothing to do (but ensure the subcells have listeners)
+                } else {
+                    const rawText = (child.textContent || '').trim();
+                    const containerDiv = document.createElement('div');
+                    containerDiv.className = 'subcells';
+                    for (let i = 0; i < 4; i++) {
+                        const box = document.createElement('div');
+                        box.className = 'subcell';
+                        box.setAttribute('data-subcell-index', i);
+                        box.contentEditable = true;
+                        containerDiv.appendChild(box);
+                    }
+                    child.innerHTML = '';
+                    child.appendChild(containerDiv);
+
+                    if (rawText.length > 0) {
+                        const first = containerDiv.querySelector('.subcell');
+                        if (first) first.textContent = rawText;
+                    }
+                }
+
+                // Wire listeners on subcells if present
+                const finalContainer = child.querySelector('.subcells');
+                if (finalContainer) {
+                    finalContainer.querySelectorAll('.subcell').forEach(sub => {
+                        sub.contentEditable = true;
+                        // Avoid double-binding: remove existing simple handlers if any by cloning
+                        // (Safer approach than tracking handlers). We'll replace the node with a clone without listeners.
+                        // But cloning would remove contentEditable; instead, use a flag to avoid duplicate.
+                        if (!sub.dataset._listenersAttached) {
+                            sub.addEventListener('keypress', (e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    sub.blur();
+                                }
+                            });
+                            sub.addEventListener('blur', () => this.autoSave());
+                            sub.dataset._listenersAttached = '1';
+                        }
+                    });
+                }
+            }
         });
     }
 
@@ -327,8 +453,12 @@ class TableManager {
         });
 
         // Save mark cells
-        document.querySelectorAll('.mark-cell.marked').forEach((cell, index) => {
-            data.markCells[index] = true;
+        // Use the global index among ALL .mark-cell elements so we can restore by position later.
+        const allMarkCells = document.querySelectorAll('.mark-cell');
+        allMarkCells.forEach((cell, index) => {
+            if (cell.classList.contains('marked')) {
+                data.markCells[index] = true;
+            }
         });
 
         return data;
@@ -440,6 +570,11 @@ class TableManager {
                 cells[index].textContent = '✓';
             }
         });
+
+        // Después de cargar datos, asegurarse de que las celdas editables tengan 4 sub-cuadrados
+        this.insertSubcellsToEditableCells();
+        // Y volver a registrar los listeners en las subcells
+        this.makeEditableCells();
     }
 
     autoSave() {
